@@ -63,10 +63,16 @@ void FIR(float* x, float* y, float* h, int size) {
 			// r3 = x[4] x[5] x[6] x[7]
                 	__m128 r3 = ld2;
 
-			// 
+			// r0 = (x[1] x[2] x[3] x[4]) * h[199]
                 	r0 = _mm_mul_ps(r0, h3);
+
+			// r1 = (x[2] x[3] x[4] x[5]) * h[198]
                 	r1 = _mm_mul_ps(r1, h2);
-                	r2 = _mm_mul_ps(r2, h1);
+
+			// r2 = (x[3] x[4] x[5] x[6]) * h[197]
+	            	r2 = _mm_mul_ps(r2, h1);
+
+			// r3 = (x[4] x[5] x[6] x[7]) * h[196]
                		r3 = _mm_mul_ps(r3, h0);
 
 			sum = _mm_add_ps(sum, r0);
