@@ -13,16 +13,16 @@ struct Data{
 /* 
 	May be used to read in data. Not sure if aligning array correctly
 */
-Data readData() {
-	struct Data d;
-	FILE* fp = fopen("sub003.data", "r");
+void readData(struct Data *d, int size) {
+	FILE* fp = fopen("sub040.data", "r");
 
-	fscanf(fp, "%f %f %c", &d.angle, &d.elevation, &d.side);
+	for(int j = 0; j < size; j++) {
+		fscanf(fp, "%f %f %c", &d[j].angle, &d[j].elevation, &d[j].side);
 
-	for(int i = 0; i < 200; i++)
-		fscanf(fp, "%f", &d.h[i]);
+		for(int i = 0; i < 200; i++)
+			fscanf(fp, "%f", &d[j].h[i]);
+	}
 	fclose(fp);
-	return d;
 }
 
 /**
@@ -30,7 +30,7 @@ Data readData() {
 	float array of int size, aligned to 16 bytes, and then converts
 	the input from int16_t to float
 */
-float* intToTloat(int16_t *input, int size) {
+float* intToFloat(int16_t *input, int size) {
 	float* output = (float*) memalign(16, size*sizeof(float));
 
 	for(int i = 0; i < size; i++)
@@ -45,8 +45,8 @@ float* intToTloat(int16_t *input, int size) {
 	int16_t array of int size, and then converts the input from 
 	int16_t to float
 */
-int16_t* floatToInt(float* input, int size) {
-	int16_t* output = (int16_t*) (size*sizeof(int16_t));
+void floatToInt(float* input, int16_t* output, int size) {
+
 
 	for(int i = 0; i < size; i++) {
 		if(input[i] > 32767.0)
@@ -55,7 +55,6 @@ int16_t* floatToInt(float* input, int size) {
 			input[i] = -32768.0;
 		output[i] = (int16_t) input[i];
 	}
-	return output;
 }
 
 /*
@@ -87,36 +86,36 @@ void FIR(float* x, float* y, float* h, int size) {
 
 			// follow example from above
 			// ld2 would be = x[4] x[5] x[6] x[7]
-            __m128 ld2 = _mm_load_ps(&x[i-j+3]);	// 200 - 199 + 3 = 200 -196 = 4
+           		 __m128 ld2 = _mm_load_ps(&x[i-j+3]);	// 200 - 199 + 3 = 200 -196 = 4
 
 			// r1 = x[2] x[3] x[4] x[5]
-            __m128 r1 = _mm_shuffle_ps(ld1,ld2, 0x4e);
+            		__m128 r1 = _mm_shuffle_ps(ld1,ld2, 0x4e);
 
 			// r0 = x[1] x[2] x[3] x[4]
-            __m128 r0 = _mm_shuffle_ps(ld1, r1, 0x99);
+	                __m128 r0 = _mm_shuffle_ps(ld1, r1, 0x99);
 		
 			// r2 = x[3] x[4] x[5] x[6]
-            __m128 r2 = _mm_shuffle_ps(r1, ld2, 0x99);
+            		__m128 r2 = _mm_shuffle_ps(r1, ld2, 0x99);
 
 			// r3 = x[4] x[5] x[6] x[7]
-            __m128 r3 = ld2;
+            		__m128 r3 = ld2;
 
 			// r0 = (x[1] x[2] x[3] x[4]) * h[199]
-            r0 = _mm_mul_ps(r0, h3);
+            		r0 = _mm_mul_ps(r0, h3);
 
 			// r1 = (x[2] x[3] x[4] x[5]) * h[198]
-            r1 = _mm_mul_ps(r1, h2);
+            		r1 = _mm_mul_ps(r1, h2);
 
 			// r2 = (x[3] x[4] x[5] x[6]) * h[197]
-	        r2 = _mm_mul_ps(r2, h1);
+	        	r2 = _mm_mul_ps(r2, h1);
 
 			// r3 = (x[4] x[5] x[6] x[7]) * h[196]
-            r3 = _mm_mul_ps(r3, h0);
+            		r3 = _mm_mul_ps(r3, h0);
 
 			sum = _mm_add_ps(sum, r0);
 			sum = _mm_add_ps(sum, r1);
-	        sum = _mm_add_ps(sum, r2);
-            sum = _mm_add_ps(sum, r3);
+	        	sum = _mm_add_ps(sum, r2);
+            		sum = _mm_add_ps(sum, r3);
 
 		}
 		_mm_store_ps(&y[i], sum);
@@ -133,6 +132,14 @@ float* createTestArray(int size) {
 	return test;
 }
 
+void placeInY(int16_t *left, int16_t *right, int16_t *combined, int fileSize) {
+
+	for(int i = 0; i < fileSize; i++) {
+		combined[i*2] = left[i];
+		combined[i*2 + 1] = right[i];
+	}
+}
+
 /*
 	This fucntion reads the data from the input stream and puts it into
 	an array
@@ -140,55 +147,89 @@ float* createTestArray(int size) {
 
 void do_HRTF_Demo() {
 
-	FILE *inputFile = fopen("something.txt", "r");
-	if(inputFile == NULL) {
-		fprintf(stderr, "Could not open the input file\n");
-		return (-1);
-	}
 
 }
 
 int main()
 {
 
-	Data d = readData();	
+	struct Data d[500];
+	readData(d, 500);		
 
-	/* Test Stuff */
-	float *x = createTestArray(400);
-	float *y = createTestArray(400);
-	float *h = createTestArray(200);
-	FIR(x, y, h, 400);
+	FILE* outFile = fopen("output-80.pcm", "w");
+	if(outFile == 0) {
+		fprintf(stderr, "Could not open output file\n");
+		return(-1);
+	}
 	
-	for(int i = 0; i < 400; i++)
-		printf("y[%i] = %f\n", i, y[i]);
+	
+	//for(int i = 0; i < 400; i++)
+	//	printf("y[%i] = %f\n", i, y[i]);
 
 	/* HRTF Demo Begin */
-	FILE *inputFile = fopen("something.txt", "r");
+	FILE *inputFile = fopen("raw.pcm", "r");
 	if(inputFile == NULL) {
 		fprintf(stderr, "Could not open the input file\n");
 		return (-1);
 	}
 
-	fseek = (inputFile, 0, SEEK_END);		// Go to the end of file
-	rewind(inputFile);						// Rewind to beginning of file
+	fseek(inputFile, 0, SEEK_END);		// Go to the end of file
 	int fileSize = ftell(inputFile);		// Get the file size
+	rewind(inputFile);						// Rewind to beginning of file
 	fileSize = fileSize / sizeof(int16_t);	// Get the number of int16_t numbers
-	int16_t *input = new int16_t[fileSize];	// Create array of number of int16_t
+	
+	// Create array of number of int16_t for file
+	int16_t *input = new int16_t[fileSize];	
 
 	// Begin to read the file
 	int read  = fread(input, sizeof(int16_t), fileSize, inputFile);
+	// Check that the amount read and the fileSize are the same
+	if(read != fileSize) {	
+		fprintf(stderr, "Read is not the same as fileSize");
+		return (-1);
+	}
 
-	//TODO: put input into float x array
+	// Put input into float x array
+	float* x_input = intToFloat(input, fileSize);
 
-	//TODO: put data into float h array
+	// Put data into float h array
+	// Probably doing this already
 
-	//TODO: create array y, aligned to 16
+	// Create float array y, aligned to 16
+	float* yLeft = (float*) memalign(16, sizeof(float)*fileSize);
+	if(yLeft == NULL) {
+		fprintf(stderr, "Y Left input memory failed to allocate\n");
+		return (-1);
+	}
+	
+	float* yRight = (float*) memalign(16, sizeof(float)*fileSize);
+	if(yRight == NULL) {
+		fprintf(stderr, "Y Left input memory failed to allocate\n");
+		return (-1);
+	}
 
 	//TODO: actually run with x, h ,y, and fileSize
-
+	
+	// Get left side
+	printf("Starting FIR\n");
+	FIR(x_input, yLeft, d[0].h, fileSize);	
+	printf("ended fir");
+	
+	// Get the right side
+	//FIR(x_input, yRight, d[1].h, fileSize);
+	free(x_input);
+	free(input);
 	//TODO: turn y array into int16_t array
+	printf("converting\n");
+	int16_t *y_left_output = new int16_t[fileSize];
+	floatToInt(yLeft, y_left_output, fileSize);
+	printf("ending converting\n");
+	//int16_t *y_right_output = new int16_t[fileSize];
+	//int16_t *y_combined = new int16_t[fileSize*2];
 
-	//TODO: put y array into file
+	//placeInY(y_left_output, y_right_output, y_combined, fileSize);
+	// Put y array into file
+	fwrite(y_left_output, sizeof(int16_t), fileSize, outFile);
 
     return(0);
 }
