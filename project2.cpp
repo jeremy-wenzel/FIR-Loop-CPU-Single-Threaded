@@ -132,7 +132,7 @@ float* createTestArray(int size) {
 	return test;
 }
 
-void placeInY(int16_t *left, int16_t *right, int16_t *combined, int fileSize) {
+void combine(int16_t *left, int16_t *right, int16_t *combined, int fileSize) {
 
 	for(int i = 0; i < fileSize; i++) {
 		combined[i*2] = left[i];
@@ -154,18 +154,28 @@ int main()
 {
 
 	struct Data d[500];
+	printf("Reading from .data file\n");
 	readData(d, 500);		
+	printf("Finished reading from .data file\n");
+	
 
-	FILE* outFile = fopen("output-80.pcm", "w");
-	if(outFile == 0) {
-		fprintf(stderr, "Could not open output file\n");
+	FILE* outFileLeft = fopen("output-80-left.pcm", "w");
+	if(outFileLeft == 0) {
+		fprintf(stderr, "Could not open left output file\n");
 		return(-1);
 	}
 	
+	FILE* outFileRight = fopen("output-80-right.pcm", "w");
+	if(outFileRight == 0) {
+		fprintf(stderr, "Could not open right output file\n");
+		return(-1);
+	}
 	
-	//for(int i = 0; i < 400; i++)
-	//	printf("y[%i] = %f\n", i, y[i]);
-
+	FILE* outFileCombined = fopen("output-80-combined.pcm", "w");
+	if(outFileCombined == 0) {
+		fprintf(stderr, "Could not open combined output file\n");
+		return(-1);
+	}
 	/* HRTF Demo Begin */
 	FILE *inputFile = fopen("raw.pcm", "r");
 	if(inputFile == NULL) {
@@ -182,13 +192,14 @@ int main()
 	int16_t *input = new int16_t[fileSize];	
 
 	// Begin to read the file
+	printf("Reading from input file\n");
 	int read  = fread(input, sizeof(int16_t), fileSize, inputFile);
 	// Check that the amount read and the fileSize are the same
 	if(read != fileSize) {	
 		fprintf(stderr, "Read is not the same as fileSize");
 		return (-1);
 	}
-
+	printf("Finished reading from input file\n");
 	// Put input into float x array
 	float* x_input = intToFloat(input, fileSize);
 
@@ -213,10 +224,11 @@ int main()
 	// Get left side
 	printf("Starting FIR\n");
 	FIR(x_input, yLeft, d[0].h, fileSize);	
-	printf("ended fir");
-	
+		
 	// Get the right side
-	//FIR(x_input, yRight, d[1].h, fileSize);
+	FIR(x_input, yRight, d[1].h, fileSize);
+	printf("Ending FIR\n");
+
 	free(x_input);
 	free(input);
 	//TODO: turn y array into int16_t array
@@ -224,12 +236,15 @@ int main()
 	int16_t *y_left_output = new int16_t[fileSize];
 	floatToInt(yLeft, y_left_output, fileSize);
 	printf("ending converting\n");
-	//int16_t *y_right_output = new int16_t[fileSize];
-	//int16_t *y_combined = new int16_t[fileSize*2];
+	int16_t *y_right_output = new int16_t[fileSize];
+	floatToInt(yRight, y_right_output, fileSize);
+	int16_t *y_combined = new int16_t[fileSize*2];
 
-	//placeInY(y_left_output, y_right_output, y_combined, fileSize);
+
+	combine(y_left_output, y_right_output, y_combined, fileSize);
 	// Put y array into file
-	fwrite(y_left_output, sizeof(int16_t), fileSize, outFile);
-
+	fwrite(y_left_output, sizeof(int16_t), fileSize, outFileLeft);
+	fwrite(y_right_output, sizeof(int16_t), fileSize, outFileRight);
+	fwrite(y_combined, sizeof(int16_t), fileSize, outFileCombined);
     return(0);
 }
