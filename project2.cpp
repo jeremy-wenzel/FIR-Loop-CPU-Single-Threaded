@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <smmintrin.h>
+#include <time.h>
 #include <malloc.h>
 
 struct Data{
@@ -328,14 +329,29 @@ void do_HRTF_Demo(Data *d, int size) {
 	
 	// Get left side
 	printf("Starting FIR\n");
-	FIR(x_input, yLeft, d[40].h, 200, fileSize);	
+	int i = 200;
+	while(i < fileSize) {
+
+		int num = rand() % 25;
+		num = num * 2;
+
+		FIR(x_input, yLeft, d[num].h, i, i+220500);	
+			
+		// Get the right side
+		FIR(x_input, yRight, d[num+1].h, i, i+220500);
+
+		i+=220500;
+	}
+
+	/*--------------------- In case of Error------------------ */
+	// FIR(x_input, yLeft, d[40].h, 200, fileSize);	
 		
-	// Get the right side
-	FIR(x_input, yRight, d[41].h, 200, fileSize);
+	// // Get the right side
+	// FIR(x_input, yRight, d[41].h, 200, fileSize);
 	printf("Ending FIR\n");
 
-	free(x_input);
-	free(input);
+	//free(x_input);
+	//free(input);
 
 	// Turn y array into int16_t array
 	printf("converting\n");
@@ -374,6 +390,6 @@ int main()
 	// 	printf("%i: Angle = %f  elevation = %f\n", i, d[i].angle, d[i].elevation);
 	// }
 	
-	steroToHeadphones(d, 60);
+	//steroToHeadphones(d, 60);
     return(0);
 }
