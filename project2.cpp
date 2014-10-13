@@ -64,7 +64,13 @@ void floatToInt(float* input, int16_t* output, int size) {
 	}
 }
 
+void floatAddFloat(float* output, float* input1, float* input2, int size) {
 
+	for(int i = 0; i < size; i++) {
+		output[i] = input1[i] + input2[i];
+		output[i] = output[i] / 2;
+	}
+}
 /*
 	This function takes in a float x array, float y array,
 	float h array, and int size
@@ -216,19 +222,46 @@ void steroToHeadphones(Data *d, int size) {
 	FIR(leftInput, yLeftNeg, LN.h, 200, fileSize);
 	FIR(rightInput, yLeftPos, LP.h, 200, fileSize);
 
+	float* yLeftTotal = (float*) memalign(16, sizeof(float)*fileSize);
+	// Add LeftNeg and LeftPos
+	floatAddFloat(yLeftTotal, yLeftNeg, yLeftPos, fileSize);
+
 	//Rout = (FIR(LIN, R-) + FIR(RIN, R+)) / 2
 	float* yRightNeg = (float*) memalign(16, sizeof(float)*fileSize);
 	float* yRightPos = (float*) memalign(16, sizeof(float)*fileSize);
 	FIR(leftInput, yRightNeg, RN.h, 200, fileSize);
 	FIR(rightInput, yRightPos, RP.h, 200, fileSize);
 
+	float* yRightTotal = (float*) memalign(16, sizeof(float)*fileSize);
+	floatAddFloat(yRightTotal, yRightNeg, yRightPos, fileSize);
 	// Close and free everything
 	free(yLeftNeg);
 	free(yLeftPos);
 	free(yRightNeg);
 	free(yRightPos);
+
+	// put right total into int16_t array
+	int16_t *rightOut = new int16_t[fileSize];
+	floatToInt(yRightTotal, rightOut, fileSize);
+	
+
+	// put left total into int16_t array
+	int16_t *leftOut = new int16_t[fileSize];
+	floatToInt(yLeftTotal, leftOut, fileSize);
+	
+
+	FILE* outFile = fopen("steroToHeadphones.pcm", "w");
+	// put leftOut and rightOut into one file
+	int16_t *total = new int16_t[fileSize*2];
+	combine(leftOut, rightOut, total, fileSize);
+	fwrite(total, sizeof(int16_t), fileSize*2, outFile);
+
+	free(total);
+	free(rightOut);
+	free(leftOut);
 	fclose(rightFile);
 	fclose(leftFile);
+	fclose(outFile);
 }
 
 /* The actual Demo Driver */
@@ -295,10 +328,10 @@ void do_HRTF_Demo(Data *d, int size) {
 	
 	// Get left side
 	printf("Starting FIR\n");
-	FIR(x_input, yLeft, d[0].h, 200, fileSize);	
+	FIR(x_input, yLeft, d[40].h, 200, fileSize);	
 		
 	// Get the right side
-	FIR(x_input, yRight, d[1].h, 200, fileSize);
+	FIR(x_input, yRight, d[41].h, 200, fileSize);
 	printf("Ending FIR\n");
 
 	free(x_input);
