@@ -69,14 +69,13 @@ void floatToInt(float* input, int16_t* output, int size) {
 	This function takes in a float x array, float y array,
 	float h array, and int size
 */
-void FIR(float* x, float* y, float* h, int size) {
+void FIR(float* x, float* y, float* h, int start, int size) {
 	__m128 sum = _mm_set1_ps(0x0000);
 	// Set first 200 values of y to 0
-	for(int i = 0; i < 200; i+=4) 
-		_mm_store_ps(&y[i], sum);
+	
 
 	// Begin vector stuff
-	for(int i = 200; i < size; i+=4) {
+	for(int i = start; i < size; i+=4) {
 		sum = _mm_set1_ps(0x0000);	// make a sum variable
 		for(int j = 199; j > 0; j-= 4) {
 			//TODO: Get on white board to make sure this is right
@@ -150,7 +149,26 @@ void combine(int16_t *left, int16_t *right, int16_t *combined, int fileSize) {
 
 void steroToHeadphones(Data *d, int size) {
 
+	struct Data LP;
+	struct Data LN;
+	struct Data RP;
+	struct Data RN;
 
+	for(int i = 0; i < size; i++) {
+		if(d[i].angle == -30 && d[i].side == 'L')
+			LN = d[i];
+		if(d[i].angle == 30 && d[i].side == 'L')
+			LP = d[i];
+		if(d[i].angle == -30 && d[i].side == 'R')
+			RN = d[i];
+		if(d[i].angle == 30 && d[i].side == 'R')
+			RP = d[i];
+	}
+
+	printf("LP angle = %f side = %c\n", LP.angle, LP.side);
+	printf("LN angle = %f side = %c\n", LN.angle, LN.side);
+	printf("RP angle = %f side = %c\n", RP.angle, RP.side);
+	printf("RN angle = %f side = %c\n", RN.angle, RN.side);
 }
 
 /* The actual Demo Driver */
@@ -217,10 +235,10 @@ void do_HRTF_Demo(Data *d, int size) {
 	
 	// Get left side
 	printf("Starting FIR\n");
-	FIR(x_input, yLeft, d[0].h, fileSize);	
+	FIR(x_input, yLeft, d[0].h, 200, fileSize);	
 		
 	// Get the right side
-	FIR(x_input, yRight, d[1].h, fileSize);
+	FIR(x_input, yRight, d[1].h, 200, fileSize);
 	printf("Ending FIR\n");
 
 	free(x_input);
@@ -255,10 +273,11 @@ int main()
 	printf("Reading from .data file\n");
 	readData(d, 100);		
 	printf("Finished reading from .data file\n");
-	do_HRTF_Demo(d, 1000);
-	for(int i = 0; i < 100; i++){
-		printf("%i: Angle = %f  elevation = %f\n", i, d[i].angle, d[i].elevation);
-	}
+	do_HRTF_Demo(d, 60);
+	// for(int i = 0; i < 100; i++){
+	// 	printf("%i: Angle = %f  elevation = %f\n", i, d[i].angle, d[i].elevation);
+	// }
 	
+	steroToHeadphones(d, 60);
     return(0);
 }
