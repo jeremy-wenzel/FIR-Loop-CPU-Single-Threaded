@@ -55,7 +55,6 @@ float* intToFloat(int16_t *input, int size) {
 */
 void floatToInt(float* input, int16_t* output, int size) {
 
-
 	for(int i = 0; i < size; i++) {
 		if(input[i] > 32767.0)
 			input[i] = 32767.0;
@@ -64,6 +63,7 @@ void floatToInt(float* input, int16_t* output, int size) {
 		output[i] = (int16_t) input[i];
 	}
 }
+
 
 /*
 	This function takes in a float x array, float y array,
@@ -169,6 +169,66 @@ void steroToHeadphones(Data *d, int size) {
 	printf("LN angle = %f side = %c\n", LN.angle, LN.side);
 	printf("RP angle = %f side = %c\n", RP.angle, RP.side);
 	printf("RN angle = %f side = %c\n", RN.angle, RN.side);
+
+	// open right file
+	FILE *rightFile = fopen("01.R.pcm", "r");
+	if(rightFile == NULL) {
+		fprintf(stderr, "Could not open the right input file (steroToHeadphones)\n");
+		exit(-1);
+	}
+
+	fseek(rightFile, 0, SEEK_END);		// Go to the end of file
+	int fileSize = ftell(rightFile);		// Get the file size
+	rewind(rightFile);						// Rewind to beginning of file
+	fileSize = fileSize / sizeof(int16_t);	// Get the number of int16_t numbers
+	
+	// open left file
+	FILE *leftFile = fopen("01.L.pcm", "r");
+	if(leftFile == NULL) {
+		fprintf(stderr, "Could not open the left input file (steroToHeadphones)\n");
+		exit(-1);
+	}
+
+	// put right side into int16_t array
+	int16_t *right_array = new int16_t[fileSize];
+	int read  = fread(right_array, sizeof(int16_t), fileSize, rightFile);
+	if(read != fileSize) {	
+		fprintf(stderr, "Read is not the same as fileSize in right array (steroToHeadphones)\n");
+		exit(-1);
+	}
+	// put left side into int16_t array
+	int16_t *left_array = new int16_t[fileSize];
+	read  = fread(left_array, sizeof(int16_t), fileSize, leftFile);
+	if(read != fileSize) {	
+		fprintf(stderr, "Read is not the same as fileSize in left array (steroToHeadphones)\n");
+		exit(-1);
+	}
+
+	// Convert right array to float array
+	float *rightInput = intToFloat(right_array, fileSize);
+	free(right_array);
+	// Convert left array to float array
+	float *leftInput = intToFloat(left_array, fileSize);
+	free(left_array);
+	//Lout = (FIR(LIN, L-) + FIR(RIN, L+)) / 2
+	float* yLeftNeg = (float*) memalign(16, sizeof(float)*fileSize);
+	float* yLeftPos = (float*) memalign(16, sizeof(float)*fileSize);
+	FIR(leftInput, yLeftNeg, LN.h, 200, fileSize);
+	FIR(rightInput, yLeftPos, LP.h, 200, fileSize);
+
+	//Rout = (FIR(LIN, R-) + FIR(RIN, R+)) / 2
+	float* yRightNeg = (float*) memalign(16, sizeof(float)*fileSize);
+	float* yRightPos = (float*) memalign(16, sizeof(float)*fileSize);
+	FIR(leftInput, yRightNeg, RN.h, 200, fileSize);
+	FIR(rightInput, yRightPos, RP.h, 200, fileSize);
+
+	// Close and free everything
+	free(yLeftNeg);
+	free(yLeftPos);
+	free(yRightNeg);
+	free(yRightPos);
+	fclose(rightFile);
+	fclose(leftFile);
 }
 
 /* The actual Demo Driver */
@@ -192,7 +252,7 @@ void do_HRTF_Demo(Data *d, int size) {
 		exit(-1);
 	}
 	/* HRTF Demo Begin */
-	FILE *inputFile = fopen("raw.pcm", "r");
+	FILE *inputFile = fopen("01.R.pcm", "r");
 	if(inputFile == NULL) {
 		fprintf(stderr, "Could not open the input file\n");
 		exit(-1);
@@ -211,7 +271,7 @@ void do_HRTF_Demo(Data *d, int size) {
 	int read  = fread(input, sizeof(int16_t), fileSize, inputFile);
 	// Check that the amount read and the fileSize are the same
 	if(read != fileSize) {	
-		fprintf(stderr, "Read is not the same as fileSize");
+		fprintf(stderr, "Read is not the same as fileSize\n");
 		exit(-1);
 	}
 	printf("Finished reading from input file\n");
@@ -243,15 +303,18 @@ void do_HRTF_Demo(Data *d, int size) {
 
 	free(x_input);
 	free(input);
-	//TODO: turn y array into int16_t array
+
+	// Turn y array into int16_t array
 	printf("converting\n");
 	int16_t *y_left_output = new int16_t[fileSize];
 	floatToInt(yLeft, y_left_output, fileSize);
 	printf("ending converting\n");
+
+
 	int16_t *y_right_output = new int16_t[fileSize];
 	floatToInt(yRight, y_right_output, fileSize);
+	
 	int16_t *y_combined = new int16_t[fileSize*2];
-
 	printf("Total samples = %i\n", fileSize*2);
 
 	combine(y_left_output, y_right_output, y_combined, fileSize);
