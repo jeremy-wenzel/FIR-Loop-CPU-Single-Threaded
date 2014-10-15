@@ -12,21 +12,25 @@ struct Data{
 };
 
 /* 
-	May be used to read in data. Not sure if aligning array correctly
+	Used to read data in from the .data file
 */
 void readData(struct Data *d, int size) {
 	FILE* fp = fopen("sub040.data", "r");
 
 	bool valid = false;
 	int j = 0;
+	// go through file
 	while(fscanf(fp, "%f %f %c", &d[j].angle, &d[j].elevation, &d[j].side) != EOF) {
+		// I am only picking coordinates at elevation 0.
 		if(d[j].elevation == 0)
 			valid = true;
+		// Grab the 200 floats
 		for(int i = 0; i < 200; i++) {
 			fscanf(fp, "%f", &d[j].h[i]);
 			if(valid == false)
 				d[j].h[i] = 0;
 		}
+		// Only go to next array when we have an elevation of 0
 		if(valid == true)
 			j++;
 		valid = false;
@@ -41,6 +45,10 @@ void readData(struct Data *d, int size) {
 */
 float* intToFloat(int16_t *input, int size) {
 	float* output = (float*) memalign(16, size*sizeof(float));
+	if(output == NULL) {
+		printf("Could not allocate memory at intToFloat");
+		exit (-1);
+	}
 
 	for(int i = 0; i < size; i++)
 		output[i] = (float) input[i];
@@ -52,13 +60,16 @@ float* intToFloat(int16_t *input, int size) {
 /**
 	This function takes in an float array of int size, makes a 
 	int16_t array of int size, and then converts the input from 
-	int16_t to float
+	int16_t to float. This method also makes sure that there is 
+	no clipping when converting from float to int
 */
 void floatToInt(float* input, int16_t* output, int size) {
 
 	for(int i = 0; i < size; i++) {
+		// In case of overflow
 		if(input[i] > 32767.0)
 			input[i] = 32767.0;
+		// In case of underflow
 		else if(input[i] < -32768.0)
 			input[i] = -32768.0;
 		output[i] = (int16_t) input[i];
@@ -92,15 +103,13 @@ void FIR(float* x, float* y, float* h, int start, int size) {
 			__m128 h1 = _mm_set1_ps(h[j-2]);
 			__m128 h0 = _mm_set1_ps(h[j-3]);
 
-
 			// example going down i = 200 and j = 199
 			// so ld1 would be = x[0] x[1] x[2] x[3]
 			__m128 ld1 = _mm_load_ps(&x[i-j-1]);	// 200 - 199 - 1= 200 - 200= 0
 
-
 			// follow example from above
 			// ld2 would be = x[4] x[5] x[6] x[7]
-           	__m128 ld2 = _mm_load_ps(&x[i-j+3]);	// 200 - 199 + 3 = 200 -196 = 4
+           	__m128 ld2 = _mm_load_ps(&x[i-j +3]);	// 200 - 199 + 3 = 200 -196 = 4
 
 			// r1 = x[2] x[3] x[4] x[5]
             __m128 r1 = _mm_shuffle_ps(ld1,ld2, 0x4e);
@@ -132,6 +141,7 @@ void FIR(float* x, float* y, float* h, int start, int size) {
             sum = _mm_add_ps(sum, r3);
 
 		}
+		// Store the sum
 		_mm_store_ps(&y[i], sum);
 	}
 }
@@ -172,11 +182,6 @@ void steroToHeadphones(Data *d, int size) {
 			RP = d[i];
 	}
 
-	printf("LP angle = %f side = %c\n", LP.angle, LP.side);
-	printf("LN angle = %f side = %c\n", LN.angle, LN.side);
-	printf("RP angle = %f side = %c\n", RP.angle, RP.side);
-	printf("RN angle = %f side = %c\n", RN.angle, RN.side);
-
 	// open right file
 	FILE *rightFile = fopen("01.R.pcm", "r");
 	if(rightFile == NULL) {
@@ -184,7 +189,7 @@ void steroToHeadphones(Data *d, int size) {
 		exit(-1);
 	}
 
-	fseek(rightFile, 0, SEEK_END);		// Go to the end of file
+	fseek(rightFile, 0, SEEK_END);			// Go to the end of file
 	int fileSize = ftell(rightFile);		// Get the file size
 	rewind(rightFile);						// Rewind to beginning of file
 	fileSize = fileSize / sizeof(int16_t);	// Get the number of int16_t numbers
@@ -211,31 +216,38 @@ void steroToHeadphones(Data *d, int size) {
 		exit(-1);
 	}
 
-	// Convert right array to float array
+	// Convert right array to float array and then free the right array
 	float *rightInput = intToFloat(right_array, fileSize);
 	free(right_array);
-	// Convert left array to float array
+	// Convert left array to float array and then free the left array
 	float *leftInput = intToFloat(left_array, fileSize);
 	free(left_array);
+
+
 	//Lout = (FIR(LIN, L-) + FIR(RIN, L+)) / 2
 	float* yLeftNeg = (float*) memalign(16, sizeof(float)*fileSize);
 	float* yLeftPos = (float*) memalign(16, sizeof(float)*fileSize);
-	FIR(leftInput, yLeftNeg, LN.h, 200, fileSize);
-	FIR(rightInput, yLeftPos, LP.h, 200, fileSize);
+	FIR(leftInput, yLeftNeg, LN.h, 200, fileSize-4);
+	FIR(rightInput, yLeftPos, LP.h, 200, fileSize-4);
 
-	float* yLeftTotal = (float*) memalign(16, sizeof(float)*fileSize);
-	// Add LeftNeg and LeftPos
+
+	// Add LeftNeg and LeftPos to LeftTotal
+	float *yLeftTotal = (float*) memalign(16, sizeof(float)*fileSize);
 	floatAddFloat(yLeftTotal, yLeftNeg, yLeftPos, fileSize);
+
 
 	//Rout = (FIR(LIN, R-) + FIR(RIN, R+)) / 2
 	float* yRightNeg = (float*) memalign(16, sizeof(float)*fileSize);
 	float* yRightPos = (float*) memalign(16, sizeof(float)*fileSize);
-	FIR(leftInput, yRightNeg, RN.h, 200, fileSize);
-	FIR(rightInput, yRightPos, RP.h, 200, fileSize);
+	FIR(leftInput, yRightNeg, RN.h, 200, fileSize-4);
+	FIR(rightInput, yRightPos, RP.h, 200, fileSize-4);
 
+	// Add the RightNeg and RightPos to RightTotal
 	float* yRightTotal = (float*) memalign(16, sizeof(float)*fileSize);
 	floatAddFloat(yRightTotal, yRightNeg, yRightPos, fileSize);
-	// Close and free everything
+
+
+	// Free some stuff
 	free(yLeftNeg);
 	free(yLeftPos);
 	free(yRightNeg);
@@ -251,35 +263,25 @@ void steroToHeadphones(Data *d, int size) {
 	floatToInt(yLeftTotal, leftOut, fileSize);
 	
 
-	FILE* outFile = fopen("steroToHeadphones.pcm", "w");
 	// put leftOut and rightOut into one file
+	FILE* outFile = fopen("steroToHeadphones.pcm", "w");
 	int16_t *total = new int16_t[fileSize*2];
 	combine(leftOut, rightOut, total, fileSize);
 	fwrite(total, sizeof(int16_t), fileSize*2, outFile);
 
+	// Free and close the rest of the data
 	free(total);
 	free(rightOut);
 	free(leftOut);
 	fclose(rightFile);
 	fclose(leftFile);
 	fclose(outFile);
+
 }
 
 /* The actual Demo Driver */
 void do_HRTF_Demo(Data *d, int size) {
 
-	FILE* outFileLeft = fopen("output-80-left.pcm", "w");
-	if(outFileLeft == 0) {
-		fprintf(stderr, "Could not open left output file\n");
-		exit(-1);
-	}
-	
-	FILE* outFileRight = fopen("output-80-right.pcm", "w");
-	if(outFileRight == 0) {
-		fprintf(stderr, "Could not open right output file\n");
-		exit(-1);
-	}
-	
 	FILE* outFileCombined = fopen("output-80-combined.pcm", "w");
 	if(outFileCombined == 0) {
 		fprintf(stderr, "Could not open combined output file\n");
@@ -301,14 +303,12 @@ void do_HRTF_Demo(Data *d, int size) {
 	int16_t *input = new int16_t[fileSize];	
 
 	// Begin to read the file
-	printf("Reading from input file\n");
 	int read  = fread(input, sizeof(int16_t), fileSize, inputFile);
 	// Check that the amount read and the fileSize are the same
 	if(read != fileSize) {	
 		fprintf(stderr, "Read is not the same as fileSize\n");
 		exit(-1);
 	}
-	printf("Finished reading from input file\n");
 	// Put input into float x array
 	float* x_input = intToFloat(input, fileSize);
 
@@ -325,71 +325,65 @@ void do_HRTF_Demo(Data *d, int size) {
 		exit(-1);
 	}
 
-	//TODO: actually run with x, h ,y, and fileSize
 	
 	// Get left side
 	printf("Starting FIR\n");
 	int i = 200;
+	// Start timing here
 	while(i < fileSize) {
 
-		int num = rand() % 25;
+		int num = rand() % 24;
 		num = num * 2;
-
-		FIR(x_input, yLeft, d[num].h, i, i+220500);	
+		int end = i + 220500;
+		if(end > fileSize)
+			end = fileSize-4;
+		FIR(x_input, yLeft, d[num].h, i, end);	
 			
 		// Get the right side
-		FIR(x_input, yRight, d[num+1].h, i, i+220500);
+		FIR(x_input, yRight, d[num+1].h, i, end);
 
 		i+=220500;
 	}
+	// Ending timing here
 
-	/*--------------------- In case of Error------------------ */
-	// FIR(x_input, yLeft, d[40].h, 200, fileSize);	
-		
-	// // Get the right side
-	// FIR(x_input, yRight, d[41].h, 200, fileSize);
 	printf("Ending FIR\n");
 
-	//free(x_input);
-	//free(input);
+	delete[] x_input;
+	free(input);
 
-	// Turn y array into int16_t array
-	printf("converting\n");
+	// Turn left array into int16_t array
 	int16_t *y_left_output = new int16_t[fileSize];
 	floatToInt(yLeft, y_left_output, fileSize);
-	printf("ending converting\n");
 
 
+	// Turn right array into int16_t array
 	int16_t *y_right_output = new int16_t[fileSize];
 	floatToInt(yRight, y_right_output, fileSize);
 	
 	int16_t *y_combined = new int16_t[fileSize*2];
-	printf("Total samples = %i\n", fileSize*2);
 
 	combine(y_left_output, y_right_output, y_combined, fileSize);
 	// Put y array into file
-	fwrite(y_left_output, sizeof(int16_t), fileSize, outFileLeft);
-	fwrite(y_right_output, sizeof(int16_t), fileSize, outFileRight);
 	fwrite(y_combined, sizeof(int16_t), fileSize*2, outFileCombined);
 
 	// Delete Arrays; May screw things up
 	delete[] y_combined;
 	delete[] y_right_output;
 	delete[] y_left_output;
+	fclose(outFileCombined);
 }
 
 int main()
 {
 
 	struct Data d[100];
-	printf("Reading from .data file\n");
-	readData(d, 100);		
-	printf("Finished reading from .data file\n");
+	readData(d, 100);
+	printf("Beginning HRTF Demo\n");		
 	do_HRTF_Demo(d, 60);
-	// for(int i = 0; i < 100; i++){
-	// 	printf("%i: Angle = %f  elevation = %f\n", i, d[i].angle, d[i].elevation);
-	// }
+	printf("Done. Demo is placed in file \"output-80-combined.pcm\"\n");
 	
-	//steroToHeadphones(d, 60);
+	printf("Beginning Stero to Headphones Conversion\n");
+	steroToHeadphones(d, 60);
+	printf("Done. Output is placed in file \"steroToHeadphones.pcm\"\n");
     return(0);
 }
