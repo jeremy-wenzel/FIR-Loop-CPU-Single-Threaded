@@ -16,7 +16,11 @@ struct Data{
 */
 void readData(struct Data *d, int size) {
 	FILE* fp = fopen("sub040.data", "r");
-
+	
+	if(fp == NULL) {
+		fprintf(stderr, "sub data is not reading. Exiting.\n");
+		exit(-1);
+	}
 	bool valid = false;
 	int j = 0;
 	// go through file
